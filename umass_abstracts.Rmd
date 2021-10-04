@@ -1,0 +1,145 @@
+---
+title: "What Topic Models can teach us about the recentt history of UMass' Economics Department?"
+author: "Diego Polanco"
+date: "28-03-2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+rm(list = ls())
+
+
+knitr::opts_chunk$set(echo = TRUE)
+
+
+
+#Setting up some libraries 
+library(tidyverse)
+library(knitr)
+#library(devtools)
+#library(tidytext)
+library(quanteda)
+library(curl)
+library(rvest)
+library(reshape)
+library(broom)
+#library(igraph)
+#library(snowboot)
+library(text2vec)
+```
+
+
+# Building the DTM Matrix    
+
+
+```{r net, echo=FALSE, warning=FALSE, include=TRUE}
+
+rm(list = ls())
+
+#Open the data set built previously 
+
+setwd("C:/Users/ASUS/OneDrive - University of Massachusetts/textdata/umass_abstracts")
+load("df_bp3.RData")
+
+
+
+#Filter by having an abstract 
+
+df <-df %>%  filter(abstract!="NA") 
+
+
+
+# Creates string of combined lowercased words
+tokens <- df$abstract %>% tolower()
+
+# Performs tokenization
+tokens <- word_tokenizer(tokens)
+
+# Prints first two tokenized rows 
+head(tokens,2)
+
+#I create an interator over each token 
+it <- itoken(tokens, ids = df$n, progressbar = FALSE)
+
+# Built the vocabulary
+voc <- create_vocabulary(it)
+
+
+# Ask Doug what is the doc_proportion_max! 
+voc <- prune_vocabulary(voc, term_count_min = 5, doc_proportion_max = 0.2)
+
+# Creates a closure that helps transform list of tokens into vector space
+vector <- vocab_vectorizer(voc)
+
+#Creates document term matrix
+dtm <- create_dtm(it, vector, type = "dgTMatrix")
+
+print(dim(dtm))
+print(dtm)
+```
+
+
+
+# Topic Modelling 
+
+"Students can work with faculty on research employing a variety of approaches to economics, including neoclassical, Marxist, institutionalist, feminist, and post-Keynesian approaches.  The faculty's research interests include pure theory, empirical work, and policy analysis"
+
+Variety of Economics Approaches: 
+
+- Neo-classical. 
+- Marxist. 
+- Institutionalist. 
+- Feminist. 
+- Post-Keynesian. 
+- Environmental (Added by me)
+- Development Economics
+
+Faculty Research Interests:
+- Pure theory. 
+- Empirical work.
+- Policy Analysis. 
+
+
+Total Topics? Let's try with 10 given the graduate student program information available at UMass website plus the consideration of including environmental and development economics. 
+
+
+```{r lda model, echo=FALSE, include=TRUE}
+# Creates new LDA model
+lda_model <- LDA$new(n_topics = 10, doc_topic_prior = 0.1, topic_word_prior = 0.01)
+
+# Fitting model
+doc_topic_distr <- lda_model$fit_transform(x = dtm, n_iter = 1000, 
+                          convergence_tol = 0.001, n_check_convergence = 25, 
+                          progressbar = FALSE)
+
+#Graph of topic distribution for first dissertation 
+barplot(doc_topic_distr[1, ], xlab = "topic", 
+        ylab = "proportion", ylim = c(0, 1), 
+        names.arg = 1:ncol(doc_topic_distr))
+
+
+```
+
+# Identyfing Topcis: Pre-Processing Issues
+
+Now we can get the top 10 words of each topic.
+
+```{r, include=TRUE, echo=FALSE}
+lda_model$get_top_words(n = 10, topic_number = c(1L,2L,3L, 4L,5L,6L,7L,8L,9L,10L), lambda = 1)
+
+```
+
+- When tokenization is done, there are economic concepts that are split apart. For example, labor share, profit share, capital accumulation, are concepts which need to be alongside each other to sustain its meaning. Otherwise, they can be related to other fields of without actually being related to them. This is predominantly important for neoclassical empirical labor economics versus marxist economics for example. For marxist approaches, the labor share is a really important concept. On the other hand, the approach to labor from empirical neoclassical framework would not use labor share as a relevant concept. So, splitting labor share in two tokens is prone to foster the topic modelling to mix labor share and labor in the same topic when they might be actually different. 
+
+- I also should concern about taking out articles, pre-positions and numbers. 
+
+- After taking care of pre-processing issues, the relevant question would be if actually the latent topic distribution is explained by the different schools of economic thought developed in the department. 
+
+
+
+
+
+
+
+
